@@ -1,0 +1,10 @@
+pyTelegramBotAPI
+requests
+feedparser
+google-genai
+deep_translator
+pytz
+groq
+googlesearch-python
+apscheduler
+flask
