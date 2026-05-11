@@ -27,7 +27,7 @@ HK = pytz.timezone("Asia/Hong_Kong")
 sys.stdout.reconfigure(encoding='utf-8')
 
 # --- API Keys & IDs (Render లో Env Variables సెట్ చేయండి) ---
-TTOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
