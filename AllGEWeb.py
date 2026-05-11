@@ -27,7 +27,7 @@ HK = pytz.timezone("Asia/Hong_Kong")
 sys.stdout.reconfigure(encoding='utf-8')
 
 # --- API Keys & IDs (Render లో Env Variables సెట్ చేయండి) ---
-TOKEN = os.getenv("TOKEN")
+TTOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
@@ -77,6 +77,7 @@ sent_alerts = {}
 sudden_move_sent = {}
 gap_alert_sent = {}
 collected_news = []
+summary_data = []
 last_sent_results = []
 last_reset_date = datetime.now(IST).date()
 
@@ -206,7 +207,14 @@ def check_gap_alert(name, price, prev_close, current_date):
     gap_key = f"{name}_{current_date}_gap"
     if gap_key not in gap_alert_sent and abs(gap_percent) >= 1.0:
         direction = "📈 **GAP UP**" if gap_percent > 0 else "📉 **GAP DOWN**"
-        safe_send(f"🚨 <b>GAP ALERT!</b>\n\n{name}\n{direction}: {gap_percent:+.2f}%\nCurrent: {price:.2f} | Prev Close: {prev_close:.2f}")
+        # ఇక్కడ మార్పు చేశాను: మెసేజ్‌ను వేరియబుల్‌లో సేవ్ చేశాను
+        msg = f"🚨 <b>GAP ALERT!</b>\n\n{name}\n{direction}: {gap_percent:+.2f}%\nCurrent: {price:.2f} | Prev Close: {prev_close:.2f}"
+        
+        # టెలిగ్రామ్ కి పంపుతున్నాం
+        safe_send(msg)
+        
+        # AI విశ్లేషణ కోసం డేటాను సేవ్ చేస్తున్నాం
+        summary_data.append(msg)
         gap_alert_sent[gap_key] = True 
 
 # --- Economic Calendar Functions ---
@@ -217,26 +225,38 @@ def fetch_economic_calendar(days=1):
         end_date = (now_ist + timedelta(days=days)).strftime('%Y-%m-%d')
         url = f"https://finnhub.io/api/v1/calendar/economic?from={start_date}&to={end_date}&token={FINNHUB_KEY}"
         events = requests.get(url, timeout=20).json().get("economicCalendar", [])
-        report, found_any = "", False
+        
+        report = ""
+        found_any = False
         targets = ["IN", "US", "JP", "CN", "EU"] 
 
         for item in events:
             event_name = item.get("event", "")
             country = item.get("country", "")
+            
+            # దేశాల ఫిల్టర్
             if any(t in country for t in targets):
-                event_time_ist = datetime.fromisoformat(item.get("time", "").replace("Z", "+00:00")).astimezone(IST)
-                telugu_name = translate_to_telugu(event_name)
-                
-                if days == 1:
-                    if event_time_ist.date() != now_ist.date() or event_time_ist < now_ist: 
+                # వారం రిపోర్ట్ (days > 1) అయితేనే IMPORTANT_EVENTS ఫిల్టర్ పనిచేస్తుంది
+                if days > 1:
+                    if not any(imp in event_name for imp in IMPORTANT_EVENTS):
                         continue
-                    report += f"📅 *{event_time_ist.strftime('%I:%M %p')}*\n🌍 {country} | 📊 MEDIUM\n🔔 {event_name}\n📝 {telugu_name}\n\n"
-                else:
-                    report += f"📅 *{event_time_ist.strftime('%d-%b %I:%M %p')}*\n🌍 {country} | 📊 MEDIUM\n🔔 {event_name}\n📝 {telugu_name}\n\n"
-                found_any = True 
-        return report if found_any else "ఈరోజుకి ఇకపై ఎటువంటి ముఖ్యమైన ఈవెంట్స్ లేవు చంటి గారు."
+                
+                # రోజువారీ (Daily) రిపోర్ట్ కోసం ఫిల్టర్ లేకుండా అన్నీ చూపిస్తుంది
+                event_time_raw = item.get("time", "")
+                if not event_time_raw: continue
+                event_time_ist = datetime.fromisoformat(event_time_raw.replace("Z", "+00:00")).astimezone(IST)
+                
+                # ఈరోజు జరిగినవి మరియు జరగబోయేవి అన్నీ చూపిస్తుంది (కేవలం జరిగిపోయిన రోజులు తప్ప)
+                if event_time_ist.date() >= now_ist.date():
+                    telugu_name = translate_to_telugu(event_name)
+                    date_format = '%I:%M %p' if days == 1 else '%d-%b %I:%M %p'
+                    
+                    report += f"📅 <b>{event_time_ist.strftime(date_format)}</b>\n🌍 {country}\n🔔 {event_name}\n📝 {telugu_name}\n\n"
+                    found_any = True 
+                    
+        return report if found_any else "ఈరోజుకి ఎటువంటి ఈవెంట్స్ షెడ్యూల్ చేయబడలేదు చంటి గారు."
     except Exception as e: 
-        return f"డేటా సేకరించడంలో ఇబ్బంది: {e}" 
+        return f"డేటా సేకరించడంలో ఇబ్బంది: {e}"
 
 # --- Live Economic Result Update Check ---
 def check_for_live_updates():
@@ -267,6 +287,7 @@ def check_for_live_updates():
                         f"🤖 <b>AI విశ్లేషణ:</b> {ai_analysis}"
                     )
                     safe_send(msg)
+                    summary_data.append(msg)
                     last_sent_results.append(event_id)
     except:
         pass
@@ -299,9 +320,18 @@ def send_global_table():
             check_gap_alert(name, price, prev_close, current_date) 
             
             # భారీ మార్పులు ఉంటే అలర్ట్ ఇస్తుంది
+            # --- ఇక్కడ మీరు అడిగిన మార్పు చేయాలి ---
             if abs(change) >= 1.50 and f"{name}_{current_date}_mv" not in sudden_move_sent:
-                safe_send(f"🚨 <b>VOLATILITY ALERT!</b>\n{name}: {change:.2f}% భారీ మార్పు!")
-                sudden_move_sent[f"{name}_{current_date}_mv"] = True 
+                # 1. మెసేజ్‌ను వేరియబుల్‌లో పెడుతున్నాం
+                v_msg = f"🚨 <b>VOLATILITY ALERT!</b>\n{name}: {change:.2f}% భారీ మార్పు!"
+                
+                # 2. పంపుతున్నాం
+                safe_send(v_msg)
+                
+                # 3. సమ్మరీ డేటాలోకి యాడ్ చేస్తున్నాం
+                summary_data.append(v_msg) 
+                
+                sudden_move_sent[f"{name}_{current_date}_mv"] = True
                 
             trend = "📈UP" if change > 0.5 else "📉DN" if change < -0.5 else "➖FT"
             table_content += f"{is_market_open(name)} {name:<20} {price:>10.2f} ({change:>+7.2f}%) {trend}\n" 
@@ -335,6 +365,7 @@ def main_loop():
             gap_alert_sent.clear()
             collected_news.clear()
             last_sent_results.clear()
+            summary_data.clear()
             last_reset_date = current_date
             log("కొత్త రోజు: డేటా రీసెట్ చేయబడింది.")
 
@@ -400,12 +431,30 @@ def handle_commands(m):
         search_indian_market_data("Stock Market India", False)
 
     elif '/summary' in m.text:
-        safe_send("⏳ విశ్లేషిస్తున్నాను...", chat_id=m.chat.id)
-        if not collected_news:
-            safe_send("వార్తలు లేవు.", chat_id=m.chat.id)
+        safe_send("⏳ మార్కెట్ కదలికల వెనుక కారణాలను విశ్లేషిస్తున్నాను...", chat_id=m.chat.id)
+        
+        # వార్తలు (News) మరియు అలర్ట్స్ (Alerts) రెండింటినీ కలుపుతున్నాం
+        # తాజా 20 వార్తలు, 15 అలర్ట్స్ తీసుకుంటున్నాం
+        all_info = "NEWS DATA:\n" + "\n".join(collected_news[-20:]) + "\n\nMARKET ALERTS:\n" + "\n".join(summary_data[-15:])
+        
+        if not collected_news and not summary_data:
+            safe_send("విశ్లేషించడానికి ప్రస్తుతానికి ఎటువంటి డేటా లేదు చంటి గారు.", chat_id=m.chat.id)
             return
-        res_text = safe_gemini(f"Summarize these news in Telugu: {' '.join(collected_news[-10:])}")
-        safe_send(f"📊 <b>మార్కెట్ రిపోర్ట్:</b>\n\n{res_text}", chat_id=m.chat.id)
+
+        prompt = f"""
+        మీరు ఒక సీనియర్ స్టాక్ మార్కెట్ అనలిస్ట్. ఈ కింద ఉన్న డేటాను జాగ్రత్తగా చదవండి:
+        {all_info}
+        
+        పైన ఉన్న సమాచారం ఆధారంగా చంటి గారి కోసం ఈ కింది పద్ధతిలో విశ్లేషణ ఇవ్వండి:
+        1. **ఏమి జరిగింది?**: ఈరోజు మార్కెట్లో వచ్చిన ముఖ్యమైన గ్యాప్స్ (Gaps) లేదా భారీ కదలికల గురించి చెప్పండి.
+        2. **ఎందుకు జరిగింది?**: (అతి ముఖ్యం) ఈ మార్కెట్ కదలికలకు గల కారణాన్ని 'NEWS DATA' లోని వార్తలతో లింక్ చేసి వివరించండి. (ఉదా: 'చమురు ధరల పెంపు వల్ల' లేదా 'US Inflation డేటా వల్ల' అని స్పష్టంగా చెప్పాలి).
+        3. **ట్రేడింగ్ సలహా**: ఈ పరిస్థితిలో ట్రేడర్స్ జాగ్రత్తగా ఉండాలా లేదా ఏదైనా అవకాశం ఉందా?
+        
+        సూచన: 8-10 లైన్లలో, స్పష్టమైన తెలుగులో, పాయింట్ల వారీగా వివరించండి. డేటాలో లేని విషయాలను ఊహించి చెప్పకండి.
+        """
+        
+        res_text = safe_gemini(prompt)
+        safe_send(f"📊 <b>సమగ్ర మార్కెట్ విశ్లేషణ (కారణాలతో సహా):</b>\n\n{res_text}", chat_id=m.chat.id)
 
 # --- Web Server Setup (Render కోసం) ---
 app = Flask('')
