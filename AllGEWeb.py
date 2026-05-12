@@ -234,40 +234,81 @@ def fetch_economic_calendar(days=1):
         now_ist = datetime.now(IST)
         start_date = now_ist.strftime('%Y-%m-%d')
         end_date = (now_ist + timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        url = f"https://finnhub.io/api/v1/calendar/economic?from={start_date}&to={end_date}&token={FINNHUB_KEY}"
-        events = requests.get(url, timeout=20).json().get("economicCalendar", [])
-        
-        # సమయం ప్రకారం ఈవెంట్లను అమర్చడం
+
+        # Finnhub API URL
+        url = (
+            f"https://finnhub.io/api/v1/calendar/economic"
+            f"?from={start_date}"
+            f"&to={end_date}"
+            f"&token={FINNHUB_KEY}"
+        )
+
+        # API Response
+        response = requests.get(url, timeout=20)
+        data = response.json()
+
+        # Debug కోసం (Render Logs లో చూడవచ్చు)
+        print("FINNHUB RESPONSE KEYS:", data.keys() if isinstance(data, dict) else data)
+
+        # Events List
+        events = data.get("economicCalendar", [])
+
+        # Events లేనప్పుడు
+        if not events:
+            print("No events returned from Finnhub API.")
+            return "ఎటువంటి ఈవెంట్స్ లేవు చంటి గారు."
+
+        # Time ఆధారంగా sort
         events.sort(key=lambda x: x.get("time", ""))
-        
+
         report = ""
         found_any = False
+
+        # మనకు కావలసిన దేశాలు
         targets = ["IN", "US", "JP", "CN", "EU"]
 
         for item in events:
-            event_name = item.get("event", "")
-            country = item.get("country", "")
-            
-            if any(t in country for t in targets):
-                # వారం రిపోర్ట్ (days > 1) అయితేనే IMPORTANT_EVENTS ఫిల్టర్ పనిచేస్తుంది
-                if days > 1:
-                    if not any(imp in event_name for imp in IMPORTANT_EVENTS):
-                        continue
-                
-                event_time_raw = item.get("time", "")
-                if not event_time_raw: continue
-                event_time_ist = datetime.fromisoformat(event_time_raw.replace("Z", "+00:00")).astimezone(IST)
-                
-                if event_time_ist >= now_ist:
-                    telugu_name = translate_to_telugu(event_name)
-                    date_format = '%I:%M %p' if days == 1 else '%d-%b %I:%M %p'
-                    
-                    report += f"📅 <b>{event_time_ist.strftime(date_format)}</b>\n🌍 {country}\n🔔 {event_name}\n📝 {telugu_name}\n\n"
-                    found_any = True 
-                    
-        return report if found_any else "ఎటువంటి ఈవెంట్స్ లేవు చంటి గారు."
-    except Exception as e: 
+            event_name = item.get("event", "").strip()
+            country = item.get("country", "").strip()
+
+            # పేరు లేదా దేశం లేకపోతే skip
+            if not event_name or not country:
+                continue
+
+            # మన దేశాలకే పరిమితం
+            if not any(t in country for t in targets):
+                continue
+
+            # /events (7 days) కోసం ముఖ్యమైన ఈవెంట్స్ మాత్రమే
+            if days > 1:
+                if not any(imp.lower() in event_name.lower() for imp in IMPORTANT_EVENTS):
+                    continue
+
+            # API ఇచ్చిన time ని నేరుగా ఉపయోగించడం
+            # (ISO parsing సమస్యలను పూర్తిగా నివారిస్తుంది)
+            event_time = item.get("time", "Time N/A")
+
+            # తెలుగు అనువాదం
+            telugu_name = translate_to_telugu(event_name)
+
+            # Report తయారు చేయడం
+            report += (
+                f"📅 <b>{event_time}</b>\n"
+                f"🌍 {country}\n"
+                f"🔔 {event_name}\n"
+                f"📝 {telugu_name}\n\n"
+            )
+
+            found_any = True
+
+        # ఫిల్టర్ తర్వాత ఏ ఈవెంట్లు లేకపోతే
+        if not found_any:
+            return "ఎటువంటి ఈవెంట్స్ లేవు చంటి గారు."
+
+        return report
+
+    except Exception as e:
+        print("Economic Calendar Error:", e)
         return f"డేటా సేకరించడంలో ఇబ్బంది: {e}"
 
 # --- Live Economic Result Update Check ---
