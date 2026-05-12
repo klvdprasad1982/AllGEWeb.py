@@ -539,10 +539,16 @@ if __name__ == "__main__":
     # 3. Main Loop Start
     threading.Thread(target=main_loop, daemon=True).start()
 
-    # 4. Telegram Bot Polling Start
-    log("Starting Bot Polling...")
-    bot.infinity_polling(
-        timeout=90,
-        long_polling_timeout=5,
-        skip_pending=True
+    # 4. Telegram Bot Polling Start (Auto Restart with Retry)
+    while True:
+        try:
+            log("Starting Bot Polling...")
+            bot.infinity_polling(
+                timeout=90,
+                long_polling_timeout=5,
+                skip_pending=True
+            )
+        except Exception as e:
+            log(f"Polling Error: {e}")
+            time.sleep(10)   # 10 సెకన్లు ఆగి మళ్లీ ప్రయత్నిస్తుంది
     )
