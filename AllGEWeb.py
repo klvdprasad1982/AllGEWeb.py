@@ -415,27 +415,51 @@ scheduler.add_job(check_for_live_updates, 'interval', minutes=5)
 scheduler.start()
 
 # --- Telegram Command Handlers ---
-@bot.message_handler(commands=['start', 'today', 'events', 'summary', 'checkindia']) 
+@bot.message_handler(commands=['start', 'today', 'events', 'summary', 'checkindia'])
 def handle_commands(m):
-    if '/start' in m.text: 
-        safe_send("🚀 బాట్ రెడీ చంటి గారు! గ్లోబల్ (IN, US, JP, CN, EU) డేటా ఫిల్టర్ ఆన్ చేయబడింది.", chat_id=m.chat.id)
 
-    elif '/today' in m.text: 
-        safe_send(fetch_economic_calendar(1), chat_id=m.chat.id)
-
-    elif '/events' in m.text: 
-        safe_send(fetch_economic_calendar(7), chat_id=m.chat.id)
-
-    elif '/summary' in m.text:
-         safe_send("⏳ విశ్లేషిస్తున్నాను...", chat_id=m.chat.id)
-
-    # వార్తలు లేకపోతే
-    if not collected_news:
-        safe_send("వార్తలు లేవు.", chat_id=m.chat.id)
+    # /start
+    if '/start' in m.text:
+        safe_send(
+            "🚀 బాట్ రెడీ చంటి గారు! గ్లోబల్ (IN, US, JP, CN, EU) డేటా ఫిల్టర్ ఆన్ చేయబడింది.",
+            chat_id=m.chat.id
+        )
         return
 
-    # AI ద్వారా సమగ్ర మార్కెట్ సమరీ
-    res_text = safe_gemini(f"""
+    # /today
+    elif '/today' in m.text:
+        safe_send(
+            fetch_economic_calendar(1),
+            chat_id=m.chat.id
+        )
+        return
+
+    # /events
+    elif '/events' in m.text:
+        safe_send(
+            fetch_economic_calendar(7),
+            chat_id=m.chat.id
+        )
+        return
+
+    # /summary
+    elif '/summary' in m.text:
+        # ముందుగా "విశ్లేషిస్తున్నాను..." మెసేజ్ పంపించడం
+        safe_send(
+            "⏳ విశ్లేషిస్తున్నాను...",
+            chat_id=m.chat.id
+        )
+
+        # వార్తలు లేకపోతే
+        if not collected_news:
+            safe_send(
+                "వార్తలు లేవు.",
+                chat_id=m.chat.id
+            )
+            return
+
+        # AI ద్వారా సమగ్ర మార్కెట్ సమరీ
+        res_text = safe_gemini(f"""
 మీరు ఒక అనుభవజ్ఞుడైన గ్లోబల్ మార్కెట్ విశ్లేషకుడు.
 
 క్రింది సమాచారాన్ని సమగ్రంగా విశ్లేషించి, చంటి గారికి అర్థమయ్యేలా స్పష్టమైన మరియు సులభమైన తెలుగులో ఒక పూర్తి మార్కెట్ సమరీ ఇవ్వండి.
@@ -453,6 +477,7 @@ def handle_commands(m):
 9. 🎯 మార్కెట్ మొత్తం Bullish, Bearish లేదా Neutral అని స్పష్టంగా చెప్పాలి.
 
 వాడాల్సిన డేటా:
+
 - తాజా గ్లోబల్ వార్తలు:
 {' '.join(collected_news[-10:])}
 
@@ -465,13 +490,20 @@ def handle_commands(m):
 దయచేసి కేవలం తెలుగులో, వివరంగా కానీ సులభంగా అర్థమయ్యే విధంగా సమాధానం ఇవ్వండి.
 """)
 
-    # ఫైనల్ రిపోర్ట్ పంపించడం
-    safe_send(
-        f"📊 <b>మార్కెట్ రిపోర్ట్:</b>\n\n{res_text}",
-        chat_id=m.chat.id
-    )
+        # ఫైనల్ రిపోర్ట్ పంపించడం
+        safe_send(
+            f"📊 <b>మార్కెట్ రిపోర్ట్:</b>\n\n{res_text}",
+            chat_id=m.chat.id
+        )
+        return
 
-    safe_send(f"📊 <b>మార్కెట్ రిపోర్ట్:</b>\n\n{res_text}", chat_id=m.chat.id)
+    # /checkindia (తరువాత మీరు లాజిక్ జోడించవచ్చు)
+    elif '/checkindia' in m.text:
+        safe_send(
+            "🇮🇳 భారత మార్కెట్ విశ్లేషణ ఫీచర్ త్వరలో అందుబాటులోకి వస్తుంది.",
+            chat_id=m.chat.id
+        )
+        return
 
 # --- Web Server Setup (Render కోసం) ---
 app = Flask('')
