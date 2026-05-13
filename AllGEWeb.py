@@ -88,6 +88,7 @@ gap_alert_sent = {}
 collected_news = []
 last_sent_results = []
 last_reset_date = datetime.now(IST).date()
+last_table_sent = None
 
 # --- మార్కెట్ డేటా & టైమింగ్స్ ---
 news_feeds = [
@@ -359,7 +360,7 @@ def ai_worker():
         time.sleep(10)
 
 def main_loop():
-    global last_reset_date
+    global last_reset_date, last_table_sent
     while True:
         now_ist_str = datetime.now(IST).strftime("%H:%M")
         current_date = datetime.now(IST).date()
@@ -412,12 +413,16 @@ def main_loop():
                 # పక్కాగా ఒకే వరుసలో వచ్చేలా స్పేసింగ్ సెట్ చేశాను
                 table_content += f"{status}{short_name:<12} {price:>9.1f} {diff:>8.1f} {change:>5.1f}% {trend:>2}\n"
         
-                # ప్రతి 10 నిమిషాలకు మాత్రమే టేబుల్ పంపాలి
-        if datetime.now(IST).minute % 10 == 0:
-            try:
-                safe_send(f"📊 <b>Global Market Live</b>\n<pre>{table_content}</pre>")
-            except:
-                pass
+                # ప్రతి 10 నిమిషాలకు ఒకసారి మాత్రమే టేబుల్ పంపాలి
+current_slot = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+
+if datetime.now(IST).minute % 10 == 0 and current_slot != last_table_sent:
+    try:
+        safe_send(f"📊 <b>Global Market Live</b>\n<pre>{table_content}</pre>")
+        last_table_sent = current_slot
+        log("Global Market Live table sent successfully.")
+    except Exception as e:
+        log(f"Table Send Error: {e}")
 
         # C. Global News
         for f_url in news_feeds:
