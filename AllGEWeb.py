@@ -344,7 +344,34 @@ def check_for_live_updates():
                     last_sent_results.append(event_id)
     except:
         pass
+    
+def send_market_table():
+    log("ప్రతి 10 నిమిషాల మార్కెట్ టేబుల్ అప్‌డేట్ ప్రారంభమైంది...")
+    table_content = f"{'-' * 52}\n"
+    table_content += f"{'Mkt':<14} {'Price':>9} {'+/-Pts':>8} {'%':>6} {'Trnd':>4}\n"
+    table_content += f"{'-' * 52}\n"
+    
+    current_date = datetime.now(IST).date()
+    for name, sym in symbols.items():
+        price, prev_close = get_data(sym)
+        if price and prev_close:
+            diff = price - prev_close
+            change = (diff / prev_close) * 100
+            check_gap_alert(name, price, prev_close, current_date)
+            
+            if change > 0.3: trend = "📈"
+            elif change < -0.3: trend = "📉"
+            else: trend = "➖"
 
+            status = is_market_open(name)
+            short_name = name.split(' (')[0][:11]
+            table_content += f"{status}{short_name:<12} {price:>9.1f} {diff:>8.1f} {change:>5.1f}% {trend:>2}\n"
+    
+    try:
+        safe_send(f"📊 <b>Global Market Live</b>\n<pre>{table_content}</pre>")
+        log("Global Market Live table విజయవంతంగా పంపబడింది.")
+    except Exception as e:
+        log(f"Table Send Error: {e}")
 
 
 # --- Workers & Loops ---
@@ -413,16 +440,6 @@ def main_loop():
                 # పక్కాగా ఒకే వరుసలో వచ్చేలా స్పేసింగ్ సెట్ చేశాను
                 table_content += f"{status}{short_name:<12} {price:>9.1f} {diff:>8.1f} {change:>5.1f}% {trend:>2}\n"
         
-                # ప్రతి 10 నిమిషాలకు ఒకసారి మాత్రమే టేబుల్ పంపాలి
-current_slot = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
-
-if datetime.now(IST).minute % 10 == 0 and current_slot != last_table_sent:
-    try:
-        safe_send(f"📊 <b>Global Market Live</b>\n<pre>{table_content}</pre>")
-        last_table_sent = current_slot
-        log("Global Market Live table sent successfully.")
-    except Exception as e:
-        log(f"Table Send Error: {e}")
 
         # C. Global News
         for f_url in news_feeds:
@@ -455,8 +472,9 @@ scheduler.add_job(
     'cron', day_of_week='sun', hour=9, minute=0
 )
 
-scheduler.add_job(check_for_live_updates, 'interval', minutes=5)
+scheduler.add_job(send_market_table, 'interval', minutes=10)
 
+scheduler.add_job(check_for_live_updates, 'interval', minutes=5)
 
 scheduler.start()
 
@@ -597,4 +615,4 @@ if __name__ == "__main__":
         except Exception as e:
             log(f"Polling Error: {e}")
             time.sleep(10)   # 10 సెకన్లు ఆగి మళ్లీ ప్రయత్నిస్తుంది
-    
+ 
